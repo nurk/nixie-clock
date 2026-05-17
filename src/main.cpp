@@ -1,12 +1,12 @@
 #include <Arduino.h>
 #include <TinyGPSPlus.h>
-#include <TimeZoneInfo.h>
+#include <PosixTimeZoneInfo.h>
 #include <Brussels.h>
-#include <Time.h>
+#include <TimeUtils.h>
 #include <util/atomic.h>
 
 TinyGPSPlus gps;
-TimeZoneInfo timeZoneInfo;
+PosixTimeZoneInfo timeZoneInfo;
 // h10, h1, m10, m1, s10, s1
 volatile uint8_t displayDigits[6] = {0, 0, 0, 0, 0, 0};
 // h10, h1, m10, m1, s10, s1
@@ -119,32 +119,27 @@ void processGps() {
         Serial2.print(F("."));
         Serial2.println(gps.time.centisecond());
 #endif
-        tm utc       = {};
-        utc.tm_year  = static_cast<int>(gps.date.year()) - 1900;
-        utc.tm_mon   = static_cast<int8_t>(gps.date.month() - 1u);
-        utc.tm_mday  = static_cast<int8_t>(gps.date.day());
-        utc.tm_hour  = static_cast<int8_t>(gps.time.hour());
-        utc.tm_min   = static_cast<int8_t>(gps.time.minute());
-        utc.tm_sec   = static_cast<int8_t>(gps.time.second());
-        utc.tm_isdst = 0;
+        const int64_t utcEpoch = toEpoch(
+            static_cast<int16_t>(gps.date.year()),
+            gps.date.month(),
+            gps.date.day(),
+            gps.time.hour(),
+            gps.time.minute(),
+            gps.time.second()
+        );
 
-        const time_t utcTime = mktime(&utc);
-        if (utcTime == static_cast<time_t>(-1)) {
-            return; // mktime failed
-        }
+        const int64_t localEpoch = timeZoneInfo.utc2local(utcEpoch);
 
-        const auto utcTimestamp = static_cast<int32_t>(utcTime);
-        // breaks in 11 years.  That is the end of Burssels.h
-        const auto localTime    = static_cast<time_t>(timeZoneInfo.utc2local(utcTimestamp));
-        tm local                = {};
-        gmtime_r(&localTime, &local);
+        uint8_t lHour, lMin, lSec;
+        toHMS(localEpoch, lHour, lMin, lSec);
+
         ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-            displayDigits[0] = local.tm_hour / 10;
-            displayDigits[1] = local.tm_hour % 10;
-            displayDigits[2] = local.tm_min / 10;
-            displayDigits[3] = local.tm_min % 10;
-            displayDigits[4] = local.tm_sec / 10;
-            displayDigits[5] = local.tm_sec % 10;
+            displayDigits[0] = lHour / 10;
+            displayDigits[1] = lHour % 10;
+            displayDigits[2] = lMin / 10;
+            displayDigits[3] = lMin % 10;
+            displayDigits[4] = lSec / 10;
+            displayDigits[5] = lSec % 10;
         }
     }
 }

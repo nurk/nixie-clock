@@ -1,5 +1,5 @@
-#ifndef TIMEZONEINFO2_H
-#define TIMEZONEINFO2_H
+#ifndef POSIXTIMEZONEINFO_H
+#define POSIXTIMEZONEINFO_H
 
 #include <Arduino.h>
 
@@ -19,9 +19,9 @@ struct PosixRule {
     int64_t time; // seconds from midnight (default 2*3600)
 };
 
-class TimeZoneInfo2 {
+class PosixTimeZoneInfo {
 public:
-    TimeZoneInfo2();
+    PosixTimeZoneInfo();
     void setLocation_P(const byte* tzFile);
     int64_t utc2local(int64_t utc);
     int64_t local2utc(int64_t local);
@@ -29,7 +29,7 @@ public:
     boolean isDst() const;
 
 private:
-    int64_t findTimeInfo(const int64_t t);
+    int64_t findTimeInfo(int64_t t);
     uint32_t read32(unsigned long pos);
     uint8_t read8(unsigned long pos);
 

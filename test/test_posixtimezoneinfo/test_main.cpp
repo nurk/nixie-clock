@@ -1,5 +1,5 @@
 /**
- * Unit tests for TimeZoneInfo2 — runs natively on host via PlatformIO native env.
+ * Unit tests for PosixTimeZoneInfo — runs natively on host via PlatformIO native env.
  *
  * Expected offsets verified against Python zoneinfo / IANA tzdata:
  *   CET  = UTC+3600  (standard, winter)
@@ -9,10 +9,11 @@
  */
 
 #include <unity.h>
-#include "TimeZoneInfo2.h"
+#include "PosixTimeZoneInfo.h"
+#include "TimeUtils.h"
 #include "Brussels.h"   // PROGMEM byte array of Europe/Brussels TZif data
 
-static TimeZoneInfo2 tz;
+static PosixTimeZoneInfo tz;
 
 void setUp() {
     tz.setLocation_P(Brussels);
@@ -22,20 +23,13 @@ void tearDown() {}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-// Build a UTC unix timestamp from date/time components (no leap-second awareness needed)
+// Thin wrapper so test call-sites stay readable
 static int64_t makeUtc(int year, int month, int day, int hour, int min, int sec) {
-    // Days from epoch to start of year
-    int64_t days = 0;
-    for (int y = 1970; y < year; y++) {
-        days += ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0) ? 366 : 365;
-    }
-    static const int dom[] = {31,28,31,30,31,30,31,31,30,31,30,31};
-    for (int m = 1; m < month; m++) {
-        days += dom[m-1];
-        if (m == 2 && ((year%4==0 && year%100!=0) || year%400==0)) days++;
-    }
-    days += day - 1;
-    return days * 86400LL + hour * 3600LL + min * 60LL + sec;
+    return toEpoch(
+        static_cast<int16_t>(year),  static_cast<uint8_t>(month),
+        static_cast<uint8_t>(day),   static_cast<uint8_t>(hour),
+        static_cast<uint8_t>(min),   static_cast<uint8_t>(sec)
+    );
 }
 
 // ── TZif v1 range: pre-2038 timestamps handled by stored transitions ──────────

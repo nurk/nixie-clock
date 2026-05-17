@@ -1,18 +1,28 @@
 /**
- * TimeZoneInfo2 — UTC to local time conversion using TZif (IANA tzdata) files.
+ * PosixTimeZoneInfo — UTC to local time conversion using TZif (IANA tzdata) files.
  *
  * Supports TZif v2/v3 files stored in PROGMEM. For timestamps beyond the last
  * explicit transition, the POSIX TZ footer rule (e.g. CET-1CEST,M3.5.0,M10.5.0/3)
  * is parsed and evaluated, giving correct DST behaviour indefinitely.
  *
  * https://github.com/rstephan/TimeZoneInfo
+ *
+ * This is an adaptation of TimeZoneInfo to handle POSIX TZ footers,
+ * which are needed for correct DST handling beyond the last
+ * TZif transition (2037-10-25 for tzdata 2024a).
+ * The code is mostly shared between the two classes,
+ * but kept separate for clarity and to avoid unnecessary code size increase for
+ * users who don't need POSIX footer support.
+ *
+ * It is backwards compatible.
+ *
  */
 
-#include "TimeZoneInfo2.h"
+#include "PosixTimeZoneInfo.h"
 
-TimeZoneInfo2::TimeZoneInfo2() = default;
+PosixTimeZoneInfo::PosixTimeZoneInfo() = default;
 
-void TimeZoneInfo2::setLocation_P(const byte* tzFile) {
+void PosixTimeZoneInfo::setLocation_P(const byte* tzFile) {
     mTzFile   = const_cast<byte*>(tzFile);
     mCharPos  = 0;
     mCharLen  = 0;
@@ -21,18 +31,18 @@ void TimeZoneInfo2::setLocation_P(const byte* tzFile) {
     parsePosixFooter();
 }
 
-int64_t TimeZoneInfo2::utc2local(const int64_t utc) {
+int64_t PosixTimeZoneInfo::utc2local(const int64_t utc) {
     const int64_t offset = findTimeInfo(utc);
     return utc + offset;
 }
 
-int64_t TimeZoneInfo2::local2utc(const int64_t local) {
+int64_t PosixTimeZoneInfo::local2utc(const int64_t local) {
     const int64_t offs = findTimeInfo(local);
     return local - offs;
 }
 
 // e.g. CEST/CET
-String TimeZoneInfo2::getShortName() {
+String PosixTimeZoneInfo::getShortName() {
     uint32_t pos = mTimeInfo.ttAbbrInd;
     String s;
 
@@ -50,11 +60,11 @@ String TimeZoneInfo2::getShortName() {
     return s;
 }
 
-boolean TimeZoneInfo2::isDst() const {
+boolean PosixTimeZoneInfo::isDst() const {
     return mTimeInfo.ttIsDst != 0;
 }
 
-uint32_t TimeZoneInfo2::read32(const unsigned long pos) {
+uint32_t PosixTimeZoneInfo::read32(const unsigned long pos) {
     uint32_t val = 0;
     val          += static_cast<uint32_t>(pgm_read_byte(&mTzFile[pos + 0])) << 24;
     val          += static_cast<uint32_t>(pgm_read_byte(&mTzFile[pos + 1])) << 16;
@@ -63,19 +73,19 @@ uint32_t TimeZoneInfo2::read32(const unsigned long pos) {
     return val;
 }
 
-uint8_t TimeZoneInfo2::read8(const unsigned long pos) {
+uint8_t PosixTimeZoneInfo::read8(const unsigned long pos) {
     return pgm_read_byte(&mTzFile[pos]);
 }
 
 // ── POSIX TZ footer ──────────────────────────────────────────────────────────
 
-bool TimeZoneInfo2::isLeap(const int64_t year) {
+bool PosixTimeZoneInfo::isLeap(const int64_t year) {
     return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
 }
 
-int64_t TimeZoneInfo2::daysInMonth(const int64_t year, const int8_t month) {
+int64_t PosixTimeZoneInfo::daysInMonth(const int64_t year, const int8_t month) {
     static const int8_t dom[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    int64_t d                 = dom[month - 1];
+    auto d                    = static_cast<int64_t>(static_cast<uint8_t>(dom[month - 1]));
     if (month == 2 && isLeap(year)) {
         d = 29;
     }
@@ -87,7 +97,7 @@ int64_t TimeZoneInfo2::daysInMonth(const int64_t year, const int8_t month) {
  * transition. wallOffset is the UTC offset in effect at transition time
  * (stdOffset for DST-start, dstOffset for DST-end), per POSIX.
  */
-int64_t TimeZoneInfo2::transitionUtc(const int64_t year, const PosixRule& rule, const int64_t wallOffset) {
+int64_t PosixTimeZoneInfo::transitionUtc(const int64_t year, const PosixRule& rule, const int64_t wallOffset) {
     // Day-of-week of Jan 1 for year. 0=Sun..6=Sat. Jan 1 1970 was Thursday (4).
     auto dowJan1 = [](const int64_t y) -> int8_t {
         const int64_t yr = y - 1970;
@@ -101,27 +111,27 @@ int64_t TimeZoneInfo2::transitionUtc(const int64_t year, const PosixRule& rule, 
     };
 
     // Day-of-week of the 1st of rule.month
-    const int8_t dow1 = (dowJan1(year) + [&]() -> int64_t {
+    const int8_t dow1 = static_cast<int8_t>((dowJan1(year) + [&]() -> int64_t {
         int64_t d = 0;
         for (int8_t m = 1; m < rule.month; m++) {
             d += daysInMonth(year, m);
         }
         return d;
-    }()) % 7;
+    }()) % 7);
 
     // Day-of-month (1-based) of the first occurrence of rule.day in rule.month
-    const int8_t diff = (rule.day - dow1 + 7) % 7;
-    int8_t dom        = 1 + diff;
+    const auto diff = static_cast<int8_t>((rule.day - dow1 + 7) % 7);
+    auto dom        = static_cast<int8_t>(1 + diff);
 
     if (rule.week == 5) {
         // Last occurrence — advance as far as possible while still in month
-        const int8_t maxDom = static_cast<int8_t>(daysInMonth(year, rule.month));
+        const auto maxDom = static_cast<int8_t>(daysInMonth(year, rule.month));
         while (dom + 7 <= maxDom) {
             dom += 7;
         }
     } else {
         // Week 1 = first, 2 = second, etc.
-        dom += static_cast<int8_t>((rule.week - 1) * 7);
+        dom = static_cast<int8_t>(dom + (rule.week - 1) * 7);
     }
 
     // Days from epoch (1970-01-01) to this date
@@ -209,7 +219,7 @@ static bool parseOffset(const char* s, int& pos, int64_t& offsetEast) {
 /**
  * Parse an Mm.w.d[/time] rule.
  */
-bool TimeZoneInfo2::parsePosixRule(const char* s, int& pos, PosixRule& rule) {
+bool PosixTimeZoneInfo::parsePosixRule(const char* s, int& pos, PosixRule& rule) {
     rule.time = 2 * 3600LL; // default 02:00
     if (s[pos] != 'M') {
         return false;
@@ -260,7 +270,7 @@ bool TimeZoneInfo2::parsePosixRule(const char* s, int& pos, PosixRule& rule) {
  *
  * Example: CET-1CEST,M3.5.0,M10.5.0/3
  */
-void TimeZoneInfo2::parsePosixFooter() {
+void PosixTimeZoneInfo::parsePosixFooter() {
     if (!mTzFile) {
         return;
     }
@@ -367,7 +377,7 @@ void TimeZoneInfo2::parsePosixFooter() {
  * Given a UTC timestamp beyond the last TZif transition, determine the
  * applicable offset using the POSIX TZ footer rule.
  */
-int64_t TimeZoneInfo2::posixOffset(const int64_t utc) const {
+int64_t PosixTimeZoneInfo::posixOffset(const int64_t utc) const {
     if (mDstOffset == mStdOffset) {
         return mStdOffset; // no DST
     }
@@ -408,11 +418,12 @@ int64_t TimeZoneInfo2::posixOffset(const int64_t utc) const {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-int64_t TimeZoneInfo2::findTimeInfo(const int64_t t) {
+int64_t PosixTimeZoneInfo::findTimeInfo(const int64_t t) {
     boolean found = false;
 
-    const uint32_t magic = read32(0);
-    if (magic != 0x545a6966) {
+    constexpr uint32_t TZIF_MAGIC = 0x545a6966; // ASCII "TZif"
+    const uint32_t magic          = read32(0);
+    if (magic != TZIF_MAGIC) {
         return 0;
     }
     const uint32_t leapCount = read32(28);
