@@ -3,8 +3,6 @@
 
 #include <Arduino.h>
 
-// https://github.com/rstephan/TimeZoneInfo
-
 struct ttInfo {
     int32_t ttGmtOffset;
     int8_t ttIsDst;
@@ -22,11 +20,11 @@ struct PosixRule {
 class PosixTimeZoneInfo {
 public:
     PosixTimeZoneInfo();
-    void setLocation_P(const byte* tzFile);
+    void setLocation_P(const uint8_t* tzFile);
     int64_t utc2local(int64_t utc);
     int64_t local2utc(int64_t local);
-    String getShortName(); // e.g. CEST/CET
-    boolean isDst() const;
+    const char* getShortName(); // e.g. "CEST" / "CET"
+    bool isDst() const;
 
 private:
     int64_t findTimeInfo(int64_t t);
@@ -41,7 +39,7 @@ private:
     static int64_t daysInMonth(int64_t year, int8_t month);
     static bool isLeap(int64_t year);
 
-    byte* mTzFile            = nullptr;
+    uint8_t* mTzFile         = nullptr;
     mutable ttInfo mTimeInfo = {0, 0, 0}; // mutable: updated by const posixOffset()
     unsigned long mCharPos   = 0;
     uint32_t mCharLen        = 0;

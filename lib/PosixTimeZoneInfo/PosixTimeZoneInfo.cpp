@@ -14,7 +14,7 @@
  * but kept separate for clarity and to avoid unnecessary code size increase for
  * users who don't need POSIX footer support.
  *
- * It is backwards compatible.
+ * It is mostly backwards compatible.
  *
  */
 
@@ -22,8 +22,8 @@
 
 PosixTimeZoneInfo::PosixTimeZoneInfo() = default;
 
-void PosixTimeZoneInfo::setLocation_P(const byte* tzFile) {
-    mTzFile   = const_cast<byte*>(tzFile);
+void PosixTimeZoneInfo::setLocation_P(const uint8_t* tzFile) {
+    mTzFile   = const_cast<uint8_t*>(tzFile);
     mCharPos  = 0;
     mCharLen  = 0;
     mHasPosix = false;
@@ -41,26 +41,27 @@ int64_t PosixTimeZoneInfo::local2utc(const int64_t local) {
     return local - offs;
 }
 
-// e.g. CEST/CET
-String PosixTimeZoneInfo::getShortName() {
+// e.g. "CEST" / "CET" — returned pointer is valid until the next call
+const char* PosixTimeZoneInfo::getShortName() {
+    static char buf[8]; // longest TZ abbreviations are 5 chars + NUL
     uint32_t pos = mTimeInfo.ttAbbrInd;
-    String s;
+    uint8_t i    = 0;
 
     if (mCharPos) {
-        while (pos < mCharLen) {
+        while (pos < mCharLen && i < sizeof(buf) - 1) {
             const uint8_t c = read8(mCharPos + pos);
             if (c == 0) {
                 break;
             }
-            s += static_cast<char>(c);
+            buf[i++] = static_cast<char>(c);
             pos++;
         }
     }
-
-    return s;
+    buf[i] = '\0';
+    return buf;
 }
 
-boolean PosixTimeZoneInfo::isDst() const {
+bool PosixTimeZoneInfo::isDst() const {
     return mTimeInfo.ttIsDst != 0;
 }
 
@@ -419,7 +420,7 @@ int64_t PosixTimeZoneInfo::posixOffset(const int64_t utc) const {
 // ─────────────────────────────────────────────────────────────────────────────
 
 int64_t PosixTimeZoneInfo::findTimeInfo(const int64_t t) {
-    boolean found = false;
+    bool found = false;
 
     constexpr uint32_t TZIF_MAGIC = 0x545a6966; // ASCII "TZif"
     const uint32_t magic          = read32(0);

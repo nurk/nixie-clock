@@ -11,7 +11,7 @@
 #include <unity.h>
 #include "PosixTimeZoneInfo.h"
 #include "TimeUtils.h"
-#include "Brussels.h"   // PROGMEM byte array of Europe/Brussels TZif data
+#include "Brussels.h"
 
 static PosixTimeZoneInfo tz;
 
@@ -19,16 +19,17 @@ void setUp() {
     tz.setLocation_P(Brussels);
 }
 
-void tearDown() {}
+void tearDown() {
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 // Thin wrapper so test call-sites stay readable
 static int64_t makeUtc(int year, int month, int day, int hour, int min, int sec) {
     return toEpoch(
-        static_cast<int16_t>(year),  static_cast<uint8_t>(month),
-        static_cast<uint8_t>(day),   static_cast<uint8_t>(hour),
-        static_cast<uint8_t>(min),   static_cast<uint8_t>(sec)
+        static_cast<int16_t>(year), static_cast<uint8_t>(month),
+        static_cast<uint8_t>(day), static_cast<uint8_t>(hour),
+        static_cast<uint8_t>(min), static_cast<uint8_t>(sec)
     );
 }
 
@@ -198,14 +199,14 @@ void test_local2utc_roundtrip_summer() {
 
 void test_exact_dst_start_instant() {
     // At exactly 01:00:00 UTC the transition fires → CEST
-    const int64_t t = makeUtc(2045, 3, 26, 1, 0, 0);  // 2045 last Sun Mar
+    const int64_t t = makeUtc(2045, 3, 26, 1, 0, 0); // 2045 last Sun Mar
     TEST_ASSERT_EQUAL_INT64(t + 7200LL, tz.utc2local(t));
     TEST_ASSERT_TRUE(tz.isDst());
 }
 
 void test_exact_dst_end_instant() {
     // At exactly 01:00:00 UTC the transition fires → CET
-    const int64_t t = makeUtc(2045, 10, 29, 1, 0, 0);  // 2045 last Sun Oct
+    const int64_t t = makeUtc(2045, 10, 29, 1, 0, 0); // 2045 last Sun Oct
     TEST_ASSERT_EQUAL_INT64(t + 3600LL, tz.utc2local(t));
     TEST_ASSERT_FALSE(tz.isDst());
 }
@@ -246,4 +247,3 @@ int main(int argc, char** argv) {
 
     return UNITY_END();
 }
-
